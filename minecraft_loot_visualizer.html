@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Bedrock Loot Table Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+            color: #ffffff;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #4CAF50;
+        }
+
+        .main-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            cursor: grab;
+            background: 
+                radial-gradient(circle at 25% 25%, rgba(76, 175, 80, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 75% 75%, rgba(33, 150, 243, 0.1) 0%, transparent 50%),
+                linear-gradient(45deg, rgba(255, 255, 255, 0.02) 25%, transparent 25%),
+                linear-gradient(-45deg, rgba(255, 255, 255, 0.02) 25%, transparent 25%);
+            background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+        }
+
+        .canvas-container:active {
+            cursor: grabbing;
+        }
+
+        .tree-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s ease;
+        }
+
+        .node {
+            background: rgba(30, 30, 30, 0.95);
+            border: 2px solid #4CAF50;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px;
+            min-width: 200px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            position: relative;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .node:hover {
+            transform: scale(1.05);
+            border-color: #66BB6A;
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
+
+        .node-header {
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 10px;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .node-content {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .node-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #66BB6A;
+        }
+
+        .btn-danger {
+            background: #f44336;
+        }
+
+        .btn-danger:hover {
+            background: #ef5350;
+        }
+
+        .btn-secondary {
+            background: #2196F3;
+        }
+
+        .btn-secondary:hover {
+            background: #42A5F5;
+        }
+
+        .connection-line {
+            position: absolute;
+            background: #4CAF50;
+            height: 2px;
+            z-index: -1;
+            opacity: 0.7;
+        }
+
+        .pool-node {
+            border-color: #FF9800;
+        }
+
+        .entry-node {
+            border-color: #2196F3;
+        }
+
+        .function-node {
+            border-color: #9C27B0;
+        }
+
+        .controls {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-bottom: 2px solid #4CAF50;
+        }
+
+        .controls h2 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #cccccc;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background: #333;
+            color: #fff;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .json-preview {
+            background: #1a1a1a;
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        .tree-level {
+            margin-left: 20px;
+            position: relative;
+        }
+
+        .tree-level::before {
+            content: '';
+            position: absolute;
+            left: -10px;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: #4CAF50;
+            opacity: 0.3;
+        }
+
+        .expandable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .expandable::before {
+            content: '▼ ';
+            color: #4CAF50;
+            transition: transform 0.3s ease;
+        }
+
+        .expandable.collapsed::before {
+            transform: rotate(-90deg);
+        }
+
+        .collapsed + .tree-level {
+            display: none;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .zoom-btn {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: 1px solid #4CAF50;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .zoom-btn:hover {
+            background: #4CAF50;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #2d2d2d;
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #4CAF50;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal h3 {
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .item-preview {
+            background: rgba(76, 175, 80, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+            border-left: 3px solid #4CAF50;
+        }
+
+        .function-preview {
+            background: rgba(156, 39, 176, 0.1);
+            padding: 8px;
+            border-radius: 5px;
+            margin: 3px 0;
+            border-left: 3px solid #9C27B0;
+            font-size: 12px;
+        }
+
+        .weight-indicator {
+            background: #FF9800;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="controls">
+                <h2>🎮 Loot Table Editor</h2>
+                
+                <div class="form-group">
+                    <label>Cargar JSON:</label>
+                    <textarea id="jsonInput" placeholder="Pega aquí tu loot table JSON..."></textarea>
+                    <button class="btn" onclick="loadLootTable()">Cargar</button>
+                </div>
+
+                <div class="form-group">
+                    <button class="btn btn-secondary" onclick="addPool()">➕ Agregar Pool</button>
+                    <button class="btn btn-secondary" onclick="exportJSON()">📥 Exportar JSON</button>
+                    <button class="btn btn-secondary" onclick="resetView()">🔄 Centrar Vista</button>
+                </div>
+
+                <div class="form-group">
+                    <label>Vista Previa JSON:</label>
+                    <div id="jsonPreview" class="json-preview"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-area">
+            <div class="zoom-controls">
+                <button class="zoom-btn" onclick="zoomIn()">🔍+</button>
+                <button class="zoom-btn" onclick="zoomOut()">🔍-</button>
+                <button class="zoom-btn" onclick="resetZoom()">⚪</button>
+            </div>
+            
+            <div class="canvas-container" id="canvas">
+                <div class="tree-container" id="treeContainer">
+                    <div id="lootTree"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para editar elementos -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <h3 id="modalTitle">Editar Elemento</h3>
+            <div id="modalForm"></div>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn" onclick="saveEdit()">Guardar</button>
+                <button class="btn btn-danger" onclick="closeModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentLootTable = {
+            pools: []
+        };
+        
+        let currentZoom = 1;
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let currentTranslate = { x: 0, y: 0 };
+        let editingElement = null;
+        let editingPath = null;
+
+        // Cargar el ejemplo inicial
+        window.onload = function() {
+            const exampleLootTable = {
+                "pools": [
+                    {
+                        "rolls": 1,
+                        "entries": [
+                            {
+                                "type": "item",
+                                "name": "minecraft:emerald",
+                                "weight": 1,
+                                "functions": [
+                                    {
+                                        "function": "set_count",
+                                        "count": {
+                                            "min": 0,
+                                            "max": 20
+                                        }
+                                    },
+                                    {
+                                        "function": "looting_enchant",
+                                        "count": {
+                                            "min": 0,
+                                            "max": 1
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "item",
+                                "name": "minecraft:book",
+                                "weight": 1,
+                                "functions": [
+                                    {
+                                        "function": "set_count",
+                                        "count": {
+                                            "min": 0,
+                                            "max": 1
+                                        }
+                                    },
+                                    {
+                                        "function": "specific_enchants",
+                                        "enchants": [
+                                            {
+                                                "id": "protection",
+                                                "level": [4, 4]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "item",
+                                "name": "minecraft:book",
+                                "weight": 1,
+                                "functions": [
+                                    {
+                                        "function": "set_count",
+                                        "count": {
+                                            "min": 0,
+                                            "max": 1
+                                        }
+                                    },
+                                    {
+                                        "function": "specific_enchants",
+                                        "enchants": [
+                                            {
+                                                "id": "unbreaking",
+                                                "level": [3, 3]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "item",
+                                "weight": 1,
+                                "name": "eye:rishiel",
+                                "functions": [
+                                    {
+                                        "function": "set_count",
+                                        "count": {
+                                            "min": 0,
+                                            "max": 1
+                                        }
+                                    },
+                                    {
+                                        "function": "set_lore",
+                                        "lore": [
+                                            "Sello antiguo que aguarda un\npoder infinito. Contiene la esencia\ndel primogénito, cuya forma fue\nsellada por voluntad divina."
+                                        ]
+                                    },
+                                    {
+                                        "function": "set_name",
+                                        "name": "§dSello de rishiel§r"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            };
+            
+            currentLootTable = exampleLootTable;
+            document.getElementById('jsonInput').value = JSON.stringify(exampleLootTable, null, 2);
+            renderTree();
+            updateJsonPreview();
+        };
+
+        function loadLootTable() {
+            try {
+                const jsonText = document.getElementById('jsonInput').value;
+                currentLootTable = JSON.parse(jsonText);
+                renderTree();
+                updateJsonPreview();
+            } catch (error) {
+                alert('Error al cargar JSON: ' + error.message);
+            }
+        }
+
+        function renderTree() {
+            const treeContainer = document.getElementById('lootTree');
+            treeContainer.innerHTML = '';
+            
+            // Nodo raíz
+            const rootNode = createNode('🎁 Loot Table', 'root', 'root');
+            treeContainer.appendChild(rootNode);
+            
+            // Pools
+            const poolsContainer = document.createElement('div');
+            poolsContainer.className = 'tree-level';
+            
+            currentLootTable.pools.forEach((pool, poolIndex) => {
+                const poolNode = createPoolNode(pool, poolIndex);
+                poolsContainer.appendChild(poolNode);
+                
+                // Entries
+                const entriesContainer = document.createElement('div');
+                entriesContainer.className = 'tree-level';
+                
+                pool.entries.forEach((entry, entryIndex) => {
+                    const entryNode = createEntryNode(entry, poolIndex, entryIndex);
+                    entriesContainer.appendChild(entryNode);
+                    
+                    // Functions
+                    if (entry.functions && entry.functions.length > 0) {
+                        const functionsContainer = document.createElement('div');
+                        functionsContainer.className = 'tree-level';
+                        
+                        entry.functions.forEach((func, funcIndex) => {
+                            const functionNode = createFunctionNode(func, poolIndex, entryIndex, funcIndex);
+                            functionsContainer.appendChild(functionNode);
+                        });
+                        
+                        entryNode.appendChild(functionsContainer);
+                    }
+                });
+                
+                poolNode.appendChild(entriesContainer);
+            });
+            
+            rootNode.appendChild(poolsContainer);
+        }
+
+        function createNode(title, type, path, data = {}) {
+            const node = document.createElement('div');
+            node.className = `node ${type}-node`;
+            
+            const header = document.createElement('div');
+            header.className = 'node-header expandable';
+            header.textContent = title;
+            header.onclick = () => toggleExpand(header);
+            
+            const actions = document.createElement('div');
+            actions.className = 'node-actions';
+            actions.onclick = (e) => e.stopPropagation();
+            
+            if (type !== 'root') {
+                const editBtn = document.createElement('button');
+                editBtn.className = 'btn';
+                editBtn.textContent = '✏️';
+                editBtn.onclick = () => editElement(path, data);
+                actions.appendChild(editBtn);
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn btn-danger';
+                deleteBtn.textContent = '🗑️';
+                deleteBtn.onclick = () => deleteElement(path);
+                actions.appendChild(deleteBtn);
+            }
+            
+            header.appendChild(actions);
+            node.appendChild(header);
+            
+            return node;
+        }
+
+        function createPoolNode(pool, poolIndex) {
+            const poolNode = createNode(
+                `🏊 Pool ${poolIndex + 1} (Rolls: ${pool.rolls})`,
+                'pool',
+                `pools.${poolIndex}`,
+                pool
+            );
+            
+            const content = document.createElement('div');
+            content.className = 'node-content';
+            content.innerHTML = `
+                <div><strong>Rolls:</strong> ${pool.rolls}</div>
+                <div><strong>Entries:</strong> ${pool.entries.length}</div>
+            `;
+            poolNode.appendChild(content);
+            
+            const addEntryBtn = document.createElement('button');
+            addEntryBtn.className = 'btn btn-secondary';
+            addEntryBtn.textContent = '➕ Agregar Entry';
+            addEntryBtn.onclick = () => addEntry(poolIndex);
+            poolNode.appendChild(addEntryBtn);
+            
+            return poolNode;
+        }
+
+        function createEntryNode(entry, poolIndex, entryIndex) {
+            const entryNode = createNode(
+                `📦 ${entry.name} (Weight: ${entry.weight})`,
+                'entry',
+                `pools.${poolIndex}.entries.${entryIndex}`,
+                entry
+            );
+            
+            const content = document.createElement('div');
+            content.className = 'node-content';
+            content.innerHTML = `
+                <div class="item-preview">
+                    <div><strong>Type:</strong> ${entry.type}</div>
+                    <div><strong>Name:</strong> ${entry.name}</div>
+                    <div><strong>Weight:</strong> <span class="weight-indicator">${entry.weight}</span></div>
+                    <div><strong>Functions:</strong> ${entry.functions ? entry.functions.length : 0}</div>
+                </div>
+            `;
+            entryNode.appendChild(content);
+            
+            const addFunctionBtn = document.createElement('button');
+            addFunctionBtn.className = 'btn btn-secondary';
+            addFunctionBtn.textContent = '➕ Agregar Function';
+            addFunctionBtn.onclick = () => addFunction(poolIndex, entryIndex);
+            entryNode.appendChild(addFunctionBtn);
+            
+            return entryNode;
+        }
+
+        function createFunctionNode(func, poolIndex, entryIndex, funcIndex) {
+            const functionNode = createNode(
+                `⚙️ ${func.function}`,
+                'function',
+                `pools.${poolIndex}.entries.${entryIndex}.functions.${funcIndex}`,
+                func
+            );
+            
+            const content = document.createElement('div');
+            content.className = 'node-content';
+            
+            let functionDetails = `<div class="function-preview"><strong>Function:</strong> ${func.function}<br>`;
+            
+            Object.keys(func).forEach(key => {
+                if (key !== 'function') {
+                    functionDetails += `<strong>${key}:</strong> ${JSON.stringify(func[key])}<br>`;
+                }
+            });
+            
+            functionDetails += '</div>';
+            content.innerHTML = functionDetails;
+            functionNode.appendChild(content);
+            
+            return functionNode;
+        }
+
+        function toggleExpand(element) {
+            element.classList.toggle('collapsed');
+        }
+
+        function editElement(path, data) {
+            editingPath = path;
+            editingElement = data;
+            
+            const modal = document.getElementById('editModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalForm = document.getElementById('modalForm');
+            
+            modalTitle.textContent = `Editar: ${path}`;
+            modalForm.innerHTML = generateEditForm(data, path);
+            
+            modal.style.display = 'block';
+        }
+
+        function generateEditForm(data, path) {
+            let form = '';
+            
+            if (path.includes('pools') && !path.includes('entries')) {
+                // Editando pool
+                form = `
+                    <div class="form-group">
+                        <label>Rolls:</label>
+                        <input type="number" id="edit_rolls" value="${data.rolls}" min="1">
+                    </div>
+                `;
+            } else if (path.includes('entries') && !path.includes('functions')) {
+                // Editando entry
+                form = `
+                    <div class="form-group">
+                        <label>Type:</label>
+                        <select id="edit_type">
+                            <option value="item" ${data.type === 'item' ? 'selected' : ''}>Item</option>
+                            <option value="loot_table" ${data.type === 'loot_table' ? 'selected' : ''}>Loot Table</option>
+                            <option value="empty" ${data.type === 'empty' ? 'selected' : ''}>Empty</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Name:</label>
+                        <input type="text" id="edit_name" value="${data.name}">
+                    </div>
+                    <div class="form-group">
+                        <label>Weight:</label>
+                        <input type="number" id="edit_weight" value="${data.weight}" min="1">
+                    </div>
+                `;
+            } else if (path.includes('functions')) {
+                // Editando function
+                form = `
+                    <div class="form-group">
+                        <label>Function:</label>
+                        <select id="edit_function">
+                            <option value="set_count" ${data.function === 'set_count' ? 'selected' : ''}>Set Count</option>
+                            <option value="looting_enchant" ${data.function === 'looting_enchant' ? 'selected' : ''}>Looting Enchant</option>
+                            <option value="specific_enchants" ${data.function === 'specific_enchants' ? 'selected' : ''}>Specific Enchants</option>
+                            <option value="set_name" ${data.function === 'set_name' ? 'selected' : ''}>Set Name</option>
+                            <option value="set_lore" ${data.function === 'set_lore' ? 'selected' : ''}>Set Lore</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Parámetros (JSON):</label>
+                        <textarea id="edit_params">${JSON.stringify(data, null, 2)}</textarea>
+                    </div>
+                `;
+            }
+            
+            return form;
+        }
+
+        function saveEdit() {
+            try {
+                const pathParts = editingPath.split('.');
+                let target = currentLootTable;
+                
+                // Navegar hasta el elemento padre
+                for (let i = 0; i < pathParts.length - 1; i++) {
+                    target = target[pathParts[i]];
+                }
+                
+                const lastKey = pathParts[pathParts.length - 1];
+                
+                if (editingPath.includes('pools') && !editingPath.includes('entries')) {
+                    // Guardar pool
+                    target[lastKey].rolls = parseInt(document.getElementById('edit_rolls').value);
+                } else if (editingPath.includes('entries') && !editingPath.includes('functions')) {
+                    // Guardar entry
+                    target[lastKey].type = document.getElementById('edit_type').value;
+                    target[lastKey].name = document.getElementById('edit_name').value;
+                    target[lastKey].weight = parseInt(document.getElementById('edit_weight').value);
+                } else if (editingPath.includes('functions')) {
+                    // Guardar function
+                    const newFunction = JSON.parse(document.getElementById('edit_params').value);
+                    target[lastKey] = newFunction;
+                }
+                
+                renderTree();
+                updateJsonPreview();
+                closeModal();
+            } catch (error) {
+                alert('Error al guardar: ' + error.message);
+            }
+        }
+
+        function deleteElement(path) {
+            if (confirm('¿Estás seguro de que quieres eliminar este elemento?')) {
+                const pathParts = path.split('.');
+                let target = currentLootTable;
+                
+                // Navegar hasta el elemento padre
+                for (let i = 0; i < pathParts.length - 1; i++) {
+                    target = target[pathParts[i]];
+                }
+                
+                const lastKey = pathParts[pathParts.length - 1];
+                
+                if (Array.isArray(target)) {
+                    target.splice(parseInt(lastKey), 1);
+                } else {
+                    delete target[lastKey];
+                }
+                
+                renderTree();
+                updateJsonPreview();
+            }
+        }
+
+        function addPool() {
+            const newPool = {
+                rolls: 1,
+                entries: []
+            };
+            currentLootTable.pools.push(newPool);
+            renderTree();
+            updateJsonPreview();
+        }
+
+        function addEntry(poolIndex) {
+            const newEntry = {
+                type: "item",
+                name: "minecraft:dirt",
+                weight: 1,
+                functions: []
+            };
+            currentLootTable.pools[poolIndex].entries.push(newEntry);
+            renderTree();
+            updateJsonPreview();
+        }
+
+        function addFunction(poolIndex, entryIndex) {
+            const newFunction = {
+                function: "set_count",
+                count: {
+                    min: 1,
+                    max: 1
+                }
+            };
+            
+            if (!currentLootTable.pools[poolIndex].entries[entryIndex].functions) {
+                currentLootTable.pools[poolIndex].entries[entryIndex].functions = [];
+            }
+            
+            currentLootTable.pools[poolIndex].entries[entryIndex].functions.push(newFunction);
+            renderTree();
+            updateJsonPreview();
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').style.display = 'none';
+            editingElement = null;
+            editingPath = null;
+        }
+
+        function updateJsonPreview() {
+            const preview = document.getElementById('jsonPreview');
+            preview.textContent = JSON.stringify(currentLootTable, null, 2);
+        }
+
+        function exportJSON() {
+            const jsonString = JSON.stringify(currentLootTable, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'loot_table.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Funciones de zoom y navegación
+        function zoomIn() {
+            currentZoom = Math.min(currentZoom * 1.2, 3);
+            updateTransform();
+        }
+
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom / 1.2, 0.3);
+            updateTransform();
+        }
+
+        function resetZoom() {
+            currentZoom = 1;
+            currentTranslate = { x: 0, y: 0 };
+            updateTransform();
+        }
+
+        function resetView() {
+            currentZoom = 1;
+            currentTranslate = { x: 0, y: 0 };
+            updateTransform();
+        }
+
+        function updateTransform() {
+            const treeContainer = document.getElementById('treeContainer');
+            treeContainer.style.transform = `translate(${currentTranslate.x + 'px'}, ${currentTranslate.y + 'px'}) scale(${currentZoom})`;
+        }
+
+        // Funcionalidad de arrastrar
+        const canvas = document.getElementById('canvas');
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.target === canvas || e.target.closest('.tree-container')) {
+                isDragging = true;
+                dragStart.x = e.clientX - currentTranslate.x;
+                dragStart.y = e.clientY - currentTranslate.y;
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                currentTranslate.x = e.clientX - dragStart.x;
+                currentTranslate.y = e.clientY - dragStart.y;
+                updateTransform();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            canvas.style.cursor = 'grab';
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            currentZoom = Math.max(0.3, Math.min(3, currentZoom * zoomFactor));
+            updateTransform();
+        });
+
+        // Cerrar modal al hacer clic fuera
+        window.onclick = function(event) {
+            const modal = document.getElementById('editModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+
+        // Atajos de teclado
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                exportJSON();
+            }
+        });
+    </script>
+</body>
+</html>
